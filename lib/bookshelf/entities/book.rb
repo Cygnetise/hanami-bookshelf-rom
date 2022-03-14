@@ -1,6 +1,6 @@
 module Bookshelf
   module Entities
-    class User < ROM::Struct
+    class Book < ROM::Struct
     end
   end
 end

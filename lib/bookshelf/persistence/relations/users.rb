@@ -1,12 +1,12 @@
 module Bookshelf
   module Persistence
     module Relations
-      class Books < ROM::Relation[:sql]
-        schema(:books, infer: true) do
+      class Users < ROM::Relation[:sql]
+        schema(:users, infer: true) do
 
           associations do
             has_many :user_books
-            has_many :users, through: :user_books
+            has_many :books, through: :user_books
           end
         end
       end

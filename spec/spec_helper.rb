@@ -101,3 +101,9 @@ RSpec.configure do |config|
   Kernel.srand config.seed
 =end
 end
+
+Factory = ROM::Factory.configure do |config|
+  config.rom = Bookshelf::Persistence.db
+end
+
+Dir[File.dirname(__FILE__) + '/support/factories/*.rb'].each { |file| require file }
