@@ -191,7 +191,6 @@ GEM
     sequel (5.54.0)
     shotgun (0.9.2)
       rack (>= 1.0)
-    sqlite3 (1.4.2)
     tilt (2.0.10)
     transproc (1.1.1)
     tzinfo (2.0.4)
@@ -221,7 +220,6 @@ DEPENDENCIES
   rom-sql (~> 3)
   rspec
   shotgun
-  sqlite3
 
 BUNDLED WITH
    2.2.27

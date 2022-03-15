@@ -7,6 +7,7 @@ module Bookshelf
           associations do
             has_many :user_books
             has_many :books, through: :user_books
+            belongs_to :organisation
           end
         end
       end

@@ -8,7 +8,6 @@ gem 'hanami',  '~> 1.3'
 gem 'rom', '~> 5'
 gem 'rom-sql', '~> 3'
 
-gem 'sqlite3'
 gem 'pg'
 
 group :development do

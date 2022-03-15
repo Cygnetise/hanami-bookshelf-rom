@@ -1,0 +1,23 @@
+version: "3.7"
+services:
+  bookshelf:
+    image: bookshelf-2.7-rom-5
+    build: .
+    volumes:
+      - ./:/usr/src/app/
+    environment:
+      - DATABASE_URL=postgres://postgres:password@db:5432/bookshelf_rom
+    depends_on:
+      - db
+
+  db:
+    image: cimg/postgres:12.8
+    volumes:
+      - pgdata:/var/lib/postgresql/data:rw
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - DATABASE_NAME=bookshelf_rom
+
+volumes:
+  pgdata:

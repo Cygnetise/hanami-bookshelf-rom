@@ -12,7 +12,10 @@ module Bookshelf
 
     def self.configuration
       @configuration ||= ROM::Configuration.new(:sql, ENV.fetch('DATABASE_URL'), options).tap do |config|
-        config.auto_registration(Hanami.root.join('lib/bookshelf/persistence'), namespace: 'Bookshelf::Persistence')
+        config.auto_registration(
+          Hanami.root.join('lib/bookshelf/persistence'),
+          extensions: [:pg_range],
+          namespace: 'Bookshelf::Persistence')
       end
     end
 
