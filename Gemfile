@@ -9,6 +9,7 @@ gem 'rom', '~> 5'
 gem 'rom-sql', '~> 3'
 
 gem 'pg'
+gem 'dry-inflector'
 
 group :development do
   # Code reloading

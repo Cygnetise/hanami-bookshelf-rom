@@ -23,6 +23,10 @@ RSpec.describe Web::Controllers::Books::Index do
           book { attributes_for(:book, user_id: id) }
           user_book { attributes_for(:user_book, book_id: book[:id], user_id: id) }
         end
+
+        # after(:create) do |user, evaluator|
+        #   create_list(:user_books, 1, user: user, book: book)
+        # end
       end
 
       initialize_with do
@@ -33,18 +37,25 @@ RSpec.describe Web::Controllers::Books::Index do
       end
 
       to_create do |instance, evaluator|
+        inflector = Dry::Inflector.new
         rel = Bookshelf::Repositories::UserRepository.new.users
-        combine_keys = rel.associations.to_h.keys.select do |assoc|
-          next false unless evaluator.attributes.keys.include?(assoc)
-          evaluator.attributes[assoc] = if evaluator.attributes[assoc].is_a?(Array)
-            evaluator.attributes[assoc].map { |val| val.respond_to?(:to_h) ? val.to_h : val }
-          else
-            evaluator.attributes[assoc].respond_to?(:to_h) ? evaluator.attributes[assoc].to_h : evaluator.attributes[assoc]
+        assocs = rel.associations.to_h.keys & evaluator.attributes.keys
+        rel.transaction do |t|
+          assocs.each do |assoc|
+            if evaluator.attributes[assoc].is_a?(Array)
+              evaluator.attributes.delete(assoc).each do |item|
+                FactoryBot.create(
+                  inflector.underscore(inflector.demodulize(item.class.name)),
+                  **item.to_h
+                )
+              end
+            else
+              FactoryBot.create(assoc, **evaluator.attributes.delete(assoc).to_h)
+            end
           end
-          true
+          rel.command(:create).call(evaluator.attributes)
         end
-        evaluator.puts "create user: #{evaluator.attributes}: #{combine_keys}"
-        Bookshelf::Repositories::UserRepository.new.users.combine(*combine_keys).command(:create).call(evaluator.attributes)
+        (assocs.any? ? rel.combine(*assocs) : rel).one
       end
     end
 
@@ -187,14 +198,14 @@ RSpec.describe Web::Controllers::Books::Index do
     end
 
     it "create" do
-      expect { FactoryBot.create(:user, :with_books) }
+      expect { user = FactoryBot.create(:user, :with_books) }
         .to change { user_repository.users.count }.from(0).to(1)
         .and change { user_book_repository.user_books.count }.from(0).to(1)
         .and change { book_repository.books.count }.from(0).to(1)
 
       expect(organisation_repository.organisations.count).to eq(0)
 
-      user = user_repository.users.combine(:books).first
+      user = user_repository.users.combine(:books).one
       expect(user).to be_a(Bookshelf::Entities::User)
 
       expect(user.books).to_not be_empty
@@ -223,9 +234,8 @@ RSpec.describe Web::Controllers::Books::Index do
         .and change { user_book_repository.user_books.count }.from(0).to(1)
         .and change { book_repository.books.count }.from(0).to(1)
 
-      user = user_repository.users.combine(:books).first
+      user = user_repository.users.combine(:books, :organisation).one
       expect(user).to be_a(Bookshelf::Entities::User)
-
       expect(user.books).to_not be_empty
 
       expect(user.organisation_id).to be_a(Integer)

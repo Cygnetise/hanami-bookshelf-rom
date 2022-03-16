@@ -208,6 +208,7 @@ DEPENDENCIES
   byebug
   capybara
   dotenv (~> 2.4)
+  dry-inflector
   factory_bot (~> 6.2)
   hanami (~> 1.3)
   hanami-validations (~> 2.0.alpha)
