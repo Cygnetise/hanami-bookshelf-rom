@@ -1,79 +1,50 @@
 RSpec.describe Web::Controllers::Books::Index do
   FactoryBot.define do
-    factory :organisation, class: 'Bookshelf::Entities::Organisation' do
-      sequence(:id) { |n| n }
-      name { "TTT" }
-      created_at { Time.now.utc }
-      updated_at { Time.now.utc }
-
-      initialize_with do
-        p 'initialize organisation'
-        Bookshelf::Repositories::OrganisationRepository.new.organisations.mapper.model.new(attributes)
-      end
-
-      to_create do |instance, evaluator|
-        evaluator.p "create organisation"
-        attrs = evaluator.attributes
-        Bookshelf::Repositories::OrganisationRepository.new.organisations.command(:create).call(attrs)
-      end
-    end
-
     factory :user, class: 'Bookshelf::Entities::User' do
       sequence(:id) { |n| n }
       name { "John" }
       created_at { Time.now.utc }
       updated_at { Time.now.utc }
-      organisation_id { organisation.id }
+      organisation_id { organisation_assoc.id }
 
       transient do
-        organisation { association(:organisation) }
-        assocs { {} }
-      end
-
-      initialize_with do
-        p 'initialize user'
-        Bookshelf::Repositories::UserRepository.new.users.mapper.model.new(attributes)
-      end
-
-      to_create do |instance, evaluator|
-        attrs = evaluator.attributes
-        evaluator.p "create user: #{attrs}"
-        Bookshelf::Repositories::UserRepository.new.users.command(:create).call(attrs)
+        organisation_assoc { association(:organisation, strategy: :build) }
       end
 
       trait :with_organisation do
-        initialize_with do
-          assocs[:organisation] = organisation
-          attrs = attributes.merge(assocs)
-          p "initialize with organisation: #{attrs}, assocs: #{assocs}"
-          combine_keys = attrs.keys & Bookshelf::Repositories::UserRepository.new.users.associations.to_h.keys
-          Bookshelf::Repositories::UserRepository.new.users.combine(*assocs.keys).mapper.model.new(attrs)
-        end
+        organisation { organisation_assoc }
       end
 
       trait :with_books do
         books { [book] }
+        user_books { [user_book] }
 
         transient do
-          book { association(:book) }
+          book { attributes_for(:book, user_id: id) }
+          user_book { attributes_for(:user_book, book_id: book[:id], user_id: id) }
         end
+      end
 
-        initialize_with do
-          books.each do |book|
-            assocs[:user_books] ||= [] << association(:user_book, book_id: book.id, user_id: attributes[:id])
-            assocs[:books] ||=[] << attributes_for(:book, user_id: attributes[:id])
+      initialize_with do
+        rel = Bookshelf::Repositories::UserRepository.new.users
+        combine_keys = rel.associations.to_h.keys.select { |assoc| attributes.keys.include? assoc }
+        p "initialize user: #{attributes}: #{combine_keys}"
+        rel.combine(*combine_keys).mapper.model.new(attributes)
+      end
+
+      to_create do |instance, evaluator|
+        rel = Bookshelf::Repositories::UserRepository.new.users
+        combine_keys = rel.associations.to_h.keys.select do |assoc|
+          next false unless evaluator.attributes.keys.include?(assoc)
+          evaluator.attributes[assoc] = if evaluator.attributes[assoc].is_a?(Array)
+            evaluator.attributes[assoc].map { |val| val.respond_to?(:to_h) ? val.to_h : val }
+          else
+            evaluator.attributes[assoc].respond_to?(:to_h) ? evaluator.attributes[assoc].to_h : evaluator.attributes[assoc]
           end
-          attrs = attributes.merge(assocs)
-          # attrs = attributes.merge(books: books.map { |b| b.to_h.merge(user_id: attributes[:id]) } )
-          p "initialize with books: #{attrs}, assocs: #{assocs}"
-          Bookshelf::Repositories::UserRepository.new.users.combine(*assocs.keys).mapper.model.new(attrs)
+          true
         end
-
-        to_create do |instance, evaluator|
-          evaluator.p 'create with books'
-          attrs = evaluator.attributes
-          Bookshelf::Repositories::UserRepository.new.users.command(:create).call(attrs)
-        end
+        evaluator.puts "create user: #{evaluator.attributes}: #{combine_keys}"
+        Bookshelf::Repositories::UserRepository.new.users.combine(*combine_keys).command(:create).call(evaluator.attributes)
       end
     end
 
@@ -121,6 +92,24 @@ RSpec.describe Web::Controllers::Books::Index do
         Bookshelf::Repositories::UserBookRepository.new.user_books.command(:create).call(attrs)
       end
     end
+
+    factory :organisation, class: 'Bookshelf::Entities::Organisation' do
+      sequence(:id) { |n| n }
+      name { "TTT" }
+      created_at { Time.now.utc }
+      updated_at { Time.now.utc }
+
+      initialize_with do
+        p 'initialize organisation'
+        Bookshelf::Repositories::OrganisationRepository.new.organisations.mapper.model.new(attributes)
+      end
+
+      to_create do |instance, evaluator|
+        evaluator.p "create organisation"
+        attrs = evaluator.attributes
+        Bookshelf::Repositories::OrganisationRepository.new.organisations.command(:create).call(attrs)
+      end
+    end
   end
 
   let(:book_repository) { Bookshelf::Repositories[:Book] }
@@ -151,15 +140,38 @@ RSpec.describe Web::Controllers::Books::Index do
     it "create" do
       expect { FactoryBot.create(:user) }
         .to change { user_repository.users.count }.from(0).to(1)
-        .and change { organisation_repository.organisations.count }.from(0).to(1)
+      expect(organisation_repository.organisations.count).to eq(0)
       expect(user_book_repository.user_books.count).to eq(0)
-      expect(user_book_repository.books.count).to eq(0)
+      expect(book_repository.books.count).to eq(0)
 
       user = user_repository.users.combine(:books, :organisation).first
       organisation = organisation_repository.organisations.first
       expect(user).to be_a(Bookshelf::Entities::User)
       expect(user.organisation.to_h).to eq(organisation.to_h)
       expect(user.books).to be_empty
+    end
+  end
+
+  context "with organisation" do
+    it "build" do
+      build_user = FactoryBot.build(:user, :with_organisation)
+      expect(build_user).to be_a(Bookshelf::Entities::User)
+
+      expect(build_user.organisation).to be_a(Bookshelf::Entities::Organisation)
+      expect(build_user).to_not respond_to(:books)
+    end
+
+    it "create" do
+      expect { FactoryBot.create(:user, :with_organisation) }
+        .to change { user_repository.users.count }.from(0).to(1)
+        .and change { organisation_repository.organisations.count }.from(0).to(1)
+      expect(user_book_repository.user_books.count).to eq(0)
+      expect(book_repository.books.count).to eq(0)
+
+      user = user_repository.users.combine(:organisation).first
+      organisation = organisation_repository.organisations.first
+      expect(user).to be_a(Bookshelf::Entities::User)
+      expect(user.organisation.to_h).to eq(organisation.to_h)
     end
   end
 
@@ -177,9 +189,10 @@ RSpec.describe Web::Controllers::Books::Index do
     it "create" do
       expect { FactoryBot.create(:user, :with_books) }
         .to change { user_repository.users.count }.from(0).to(1)
-        .and change { organisation_repository.organisations.count }.from(0).to(1)
         .and change { user_book_repository.user_books.count }.from(0).to(1)
         .and change { book_repository.books.count }.from(0).to(1)
+
+      expect(organisation_repository.organisations.count).to eq(0)
 
       user = user_repository.users.combine(:books).first
       expect(user).to be_a(Bookshelf::Entities::User)
@@ -204,7 +217,7 @@ RSpec.describe Web::Controllers::Books::Index do
     end
 
     it "create" do
-      expect { FactoryBot.create(:user, :with_books) }
+      expect { FactoryBot.create(:user, :with_books, :with_organisation) }
         .to change { user_repository.users.count }.from(0).to(1)
         .and change { organisation_repository.organisations.count }.from(0).to(1)
         .and change { user_book_repository.user_books.count }.from(0).to(1)
